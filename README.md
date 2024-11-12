@@ -3,7 +3,6 @@ DNA-SaM: a robust system for large-scale data storage
 
 ## Background
 This is a linear encoding algorithm for DNA information storage, used for DNA encoding of large-scale data.
-**----**
 
 ## Requirement
 * numpy: 1.26.0
