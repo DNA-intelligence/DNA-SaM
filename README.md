@@ -11,7 +11,9 @@ This is a linear encoding algorithm for DNA information storage, used for DNA en
 
 ## Usage
 * **encode**  
-// python encode.py -i The_Google_File_System.pdf -o test -c config.json  
+```
+python encode.py -i The_Google_File_System.pdf -o test -c config.json
+```
 > -i: file for DNA encode  
 > -o: output file  
 > -c: config file which include primer sequence and other information  
