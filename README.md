@@ -51,9 +51,46 @@ The decoding process is the inverse of the encoding process, which contains the 
 8. **File reconstruction based on address order:** concatenate all sequences according to the address block order to generate the final decoded file.
 
 ## Files
-DNA-SaM supports multiple file types. A file-type encoding table is provided as Table S3 in the Supplementary Information, which introduces the records of 38 file types by 4-nt DNA fragments.
+DNA-SaM supports multiple file types. A file-type encoding table is provided as Table 1, which introduces the records of 38 file types by 4-nt DNA fragments.
+#### Table 1. File type encoding table.
+| File type | File suffix | DNA |
+| --- | --- | --- |
+| Text file | .txt、.doc/.docx、.log | ATCG、ATGC、TACG |
+| Image file | .jpg/.jpeg、.png、.gif、.bmp、.tiff | TCGA、ACTG、ACGT、AGCT、AGTC |
+| Audio files | .mp3、.wav、.aac、.flac、.ogg | TAGC、TCAG、TGAC、TGCA、CATG |
+| Video file | .mp4、.avi、.mov、.wmv、.mvkv | ATCA、ATAC、TCGC、ACGC、AGGT |
+| Spreadsheet | .xls/.xlsx、.csv | CAGT、CTAG |
+| Compress file | .zip、.rar、.7z、.gz | CTGA、CGAT、CGTA、GATC |
+| Executable file | .exe、.app | GACT、GTCA |
+| Web page file | .html/.htm、.css | GTAC、GCTA |
+| Database file | .db、.sql | GATG、GTAG |
+| Program source code file | .c/.cpp、.py、.java、.js | CATC、CTAC、ACGA、AGCA |
+| Document files | .ppt、.pdf、.md、.epub | TCGT、TGCT、ACAC、CACA |
 
-To validate the favorable performance of DNA-SaM, various files have been encoded by DNA-SaM system, followed by performing standard DNA data storage scheme. The encoded files are provided in Table S12, with recording the file names, file types, addresses, file sizes, primers and the encoded oligo numbers. 
+To validate the favorable performance of DNA-SaM, various files have been encoded by DNA-SaM system, followed by performing standard DNA data storage scheme. The encoded files are provided in Table 2, with recording the file names, file types, addresses, file sizes, primers and the encoded oligo numbers. 
+
+#### Table 2. File encoding details for experimental verification. 
+| File name | File permission | File primer (left) | File primer (right) | File random address | File size (Byte) | Oligo number |
+|----------|-----------------|--------------------|---------------------|---------------------|------------------|--------------|
+| star.mp4 | user | ATTGCCCCTTGGACCCAACG | CTCATCTCCGGCAGCAGTAG | [1009, 488, 12, 720, 929, 365, 771, 586, 871, 577, 605] | 243517 | 9744 |
+| chest_x_ray.png | admin | TCGCCCGAAGAAAAGACTCC | TACGAACGCAGGGTGTAAGG | [387, 499, 117, 404, 374, 920, 141, 732, 214, 560, 330] | 266208 | 10651 |
+| The_Google_File_System.pdf | admin | GCCACAGATTTCGCGATACC | GGAGTCATGTGGGGCCTTTC | [399, 372, 308, 649, 25, 744, 365, 350, 672, 937, 490] | 275544 | 11024 |
+| xiyou_0.txt | admin | CGCAGCGTGTGAGATTCATG | AGCGTGTCTGTGGGTGTATC | [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] | 1450736 | 11609 |
+| xiyou_1.txt | admin | CGCAGCGTGTGAGATTCATG | AGCGTGTCTGTGGGTGTATC | [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] |  | 11609 |
+| xiyou_2.txt | admin | CGCAGCGTGTGAGATTCATG | AGCGTGTCTGTGGGTGTATC | [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] |  | 11609 |
+| xiyou_3.txt | admin | CGCAGCGTGTGAGATTCATG | AGCGTGTCTGTGGGTGTATC | [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] |  | 11609 |
+| xiyou_4.txt | admin | CGCAGCGTGTGAGATTCATG | AGCGTGTCTGTGGGTGTATC | [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] |  | 11609 |
+| bencao_0.txt | admin | TTCGCCGCCAGAATCAGCAG | ACGGCCTCAACACAGACGAC | [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] | 460158 | 9206 |
+| bencao_1.txt | admin | TTCGCCGCCAGAATCAGCAG | ACGGCCTCAACACAGACGAC | [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] |  | 9206 |
+| tiangong.txt | admin | GCCGCGTGACCTTCATCTGT | GTTGCCTTGACGTGGGTGTG | [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] | 179581 | 7187 |
+| Cottage | admin | GGCCGCTTTCGTCACATAAC | CGAGACCCGCAACTTGACTG | [427, 536, 241, 380, 694, 432, 619, 535, 769, 391, 88] | 278311 | 11136 |
+| Coner | admin | GGCCCTATGTCTCAGCACTC | TCGGACAAGTCGCGGAGTTC | [720, 776, 128, 965, 211 341, 121, 412, 410, 294, 719] | 282629 | 11307 |
+| Giraffe | admin | GGCTGCTGACCTCCATAACG | GGACAAGCCCGACCCTATAG | [1000, 322, 407, 318, 261, 81, 196, 895, 681, 6, 351] | 282350 | 11297 |
+| Three horses-122 | admin | TGAAGATGGAGGGAGCGAAG | CTTCTCAACGTCCGCCCATG | [0, 0, 0, 0, 0, 0, 0, 0, 0, 30, 3] | 262144 | 10489 |
+| Three horses-339 | admin | TGAAGATGGAGGGAGCGAAG | CTTCTCAACGTCCGCCCATG | [0, 0, 0, 0, 0, 0, 0, 0, 0, 85, 1] | 262144 | 10489 |
+| Three horse-492 | admin | TGAAGATGGAGGGAGCGAAG | CITCTCAACGTCCGCCCATG | [0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 1] | 262144 | 10489 |
+
+_Total size: 4505466 (4.30 MB)  Oligo number: 180270_
 
 ## Example of usage
 * **encode**  
