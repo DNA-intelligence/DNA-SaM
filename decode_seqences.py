@@ -1,13 +1,13 @@
-from collections import Counter
-from util.DNAException import *
-import single_edit_code as sec
-from operator import itemgetter
 import os
 import argparse
-import json
 import re
+from collections import Counter
 import time
+from DNAException import *
+import single_edit_code as sec
 import math
+from operator import itemgetter
+import numpy as np
 
 complementary_table = {"A":"T", "C":"G", "T":"A", "G":"C", "N":"N"}
 base_xor = [[0, 1, 2, 3], [1, 0, 3, 2],
@@ -27,20 +27,22 @@ units_dict = {
 
 def get_opts():
     group = argparse.ArgumentParser(description="Cluster and Filter sequences from PE sequencing reads")
+    group.add_argument("-i", "--input", help="input file", required=True)
+    group.add_argument("-p1", "--pair1", help="PE1 fastq file", required=True)
+    group.add_argument("-p2", "--pair2", help="PE2 fastq file", required=True)
     group.add_argument("-f", "--filter", help="value of proportion of low quality bases in the sequence", default=0.2, type=float)
     group.add_argument("-c", "--config", help="config path", required=True)
-    group.add_argument("-o", "-output", help="output file", required=True)
     return group
 
 class Decoder():
-    def __init__(self):
+    def __init__(self, input_file):
         self.code = sec.SingleEditCode(int(48 * math.log(140, 4)))
         self.slice = self.read_in_slice()
         self.slice_map, self.slice_inv_map = self.read_in_slice_map()
         self.slice_inv_index = self.build_inv_index()
-        self.record = self.read_in_record()
+        self.record = self.read_in_record(input_file)
         self.forbidden_list = self.read_in_forbidden_list()
-        self.ecc = self.read_in_ecc_data()   
+        self.ecc = self.read_in_ecc_data(input_file)   
 
     def read_in_forbidden_list(self,forbidden_list_file='forbidden_list.txt'):
         # 示例：12300131\n
@@ -54,8 +56,11 @@ class Decoder():
         else:
             return forbidden_list
 
-    def read_in_ecc_data(self,ecc_file='ecc.txt'):
+    def read_in_ecc_data(self,input_file):
         try:
+            ecc_file = 'ecc.txt'
+            if input_file:
+                ecc_file = os.getcwd() + os.sep + input_file + os.sep + ecc_file
             ef = open(ecc_file, 'r')
             ecc_list = ef.readlines()
             ef.close()
@@ -86,9 +91,12 @@ class Decoder():
                 base_data[replace_len+replace_index:]
         return base_data
     
-    def read_in_record(self,record_file='record.txt'):
+    def read_in_record(self, input_file):
         # 示例，00100011-2,8,4-\n，地址-禁忌序列id,替换串长度,索引\n
         try:
+            record_file = 'record.txt'
+            if input_file:
+                record_file = os.getcwd() + os.sep + input_file + os.sep + record_file
             rf = open(record_file, 'r')
             raw_record = rf.readlines()
             raw_record = [r.split('-')[:-1] for r in raw_record]
@@ -177,6 +185,7 @@ class Decoder():
         match_seq_count_dict = count_dict   # match seq and count 
         id_addr_info = dict()               # dict[id_number] = [addr_quad, info_seq_quad]
         pass_ecc_seq = dict()
+        max_id = 0
         pass_ecc_file = out_dir + os.sep + 'pass_ecc_file.txt'
         ecc_out = open(pass_ecc_file, 'w')
         for k,v in match_seq_count_dict.items():
@@ -194,6 +203,8 @@ class Decoder():
                 info = self.ecc_decode(info, addr)
             except:
                 continue
+            if id > max_id:
+                max_id = id
             if id not in id_addr_info.keys():
                 id_addr_info[id] = [[addr, info, v]]
                 pass_ecc_seq[id] = [primer1 + k + primer2]
@@ -202,69 +213,127 @@ class Decoder():
                 ecc_out.write(str(id) + '\t' + info + '\n')
                 pass_ecc_seq[id].append(primer1 + k + primer2)
         ecc_out.close()
+        max_id += 1
         pass_decode_bit = dict()    # seq dict which pass quad to bit
-        for id in range(len(id_addr_info)):
-            for lst in id_addr_info[id]:
-                if self.decode_frag(lst[1]):
-                    revert_bits = self.decode_frag(lst[1])
-                    if id not in pass_decode_bit.keys():
-                        pass_decode_bit[id] = [[revert_bits,lst[2]]]
-                    else:
-                        pass_decode_bit[id].append([revert_bits,lst[2]])
+        for id in range(max_id):
+            try:
+                for lst in id_addr_info[id]:
+                    if self.decode_frag(lst[1]):
+                        revert_bits = self.decode_frag(lst[1])
+                        if id not in pass_decode_bit.keys():
+                            pass_decode_bit[id] = [[revert_bits,lst[2]]]
+                        else:
+                            pass_decode_bit[id].append([revert_bits,lst[2]])
+            except:
+                pass_decode_bit[id] = [[b'',0]]
                         
-        return pass_decode_bit, pass_ecc_seq
+        return pass_decode_bit, pass_ecc_seq, max_id
                 
     def decode(self, pass_seq: dict)->str:
         result = b''
         pass_decode_seq = pass_seq
+        # 候选序列
+        condidate_seq = []
         all_bits_frag = []
         for i in range(len(pass_decode_seq)):
             tmp_count_dict = dict()
-            seq_count = pass_decode_seq[i]
+            try:
+                seq_count = pass_decode_seq[i]
+            except:
+                pass_decode_seq[i] = [[b'',0]]
+                all_bits_frag.append([b'',0])
+                continue
             for i_1, i_2 in seq_count:
                 if i_1 not in tmp_count_dict.keys():
                     tmp_count_dict[i_1] = i_2
                 tmp_count_dict[i_1] += i_2
             seq_count_lst = [[k,v] for k,v in tmp_count_dict.items()]
             sorted_count = sorted(seq_count_lst,key=itemgetter(1),reverse=True)
+            # 候选序列
+            if len(sorted_count) == 1:
+                condidate_seq.append([])
+            elif sorted_count[0][1] <= 2 * sorted_count[1][1]:
+                condidate_seq.append([sorted_count[1][0]])
+            else:
+                condidate_seq.append([])
             s, n = sorted_count[0]
-            all_bits_frag.append(s)
+            all_bits_frag.append([s,n])
 
         tmp_list = []
+        tmp_count = []
+        flag = False
+        sum = []
         for i in range(len(all_bits_frag)):
             if (i + 1) % (5 + 1) != 0:
-                tmp_list.append(all_bits_frag[i])
+                tmp_list.append(all_bits_frag[i][0])
+                tmp_count.append(all_bits_frag[i][1])
             else:
-                if redundancy(tmp_list) == all_bits_frag[i]:
+                if redundancy(tmp_list) == all_bits_frag[i][0]:
+                    sum += tmp_list
                     for j in tmp_list:
                         result += j
                     tmp_list = []
+                    tmp_count = []
+                    continue
+                elif all_bits_frag[i][1] < np.min(tmp_count) and all_bits_frag[i][1] < np.mean(tmp_count)/10:
+                    sum += tmp_list
+                    for j in tmp_list:
+                        result += j
+                    tmp_list = []
+                    tmp_count = []
                     continue
                 else:
-                    print("redundancy: ",all_bits_frag[i])
-                    for k in range(1,5):
-                        for l in pass_decode_seq[i-k]:
-                            if k == 1:
-                                merge_list = list(tmp_list[:-k])+[l[0]]
-                            else:
-                                merge_list = list(tmp_list[:-k])+[l[0]]+list(tmp_list[-k-1:])
-                            if redundancy(merge_list) == all_bits_frag[i]:
-                                tmp_list = list(merge_list)
-                            else:
-                                redun = redundancy(merge_list)
-                                sam_n = 0
-                                for index in range(len(redun)):
-                                    if redun[index] == all_bits_frag[i][index]:
-                                        sam_n += 1
-                                if sam_n > len(redun) *0.5:
-                                    r1 = redundancy(list(tmp_list[:-k])+[redun]+list(tmp_list[-k:]))
-                                    tmp_list = list(tmp_list[:-k])+[r1]+list(tmp_list[-k:])
+                    print("redundancy: ",all_bits_frag[i][0], i)
+                    
+                    if '' in tmp_list:
+                        for n,s in enumerate(tmp_list):
+                            if not s:
+                                tmp_list[n] = redundancy(tmp_list+[all_bits_frag[i][0]])
+                                print(redundancy(tmp_list+[all_bits_frag[i][0]]))
+                        print('[new]: ',tmp_list)
+                    else:
+                        for k in range(1,5):
+                            # 候选序列
+                            if redundancy(tmp_list) != all_bits_frag[i][0] and condidate_seq[i-k]:
+                                tmp_ls1 = tmp_list[:]
+                                tmp_ls1.pop(5-k)
+                                tmp_ls1.insert(5-k,condidate_seq[i-k][0])
+                                if redundancy(tmp_ls1) == all_bits_frag[i][0]:
+                                    tmp_list = list(tmp_ls1)
+                                    flag = True
+                                    break
+                            for l in pass_decode_seq[i-k]:
+                                if k == 1:
+                                    merge_list = list(tmp_list[:-k])+[l[0]]
                                 else:
-                                    continue
+                                    merge_list = list(tmp_list[:-k])+[l[0]]+list(tmp_list[-k-1:])
+                                if redundancy(merge_list) == all_bits_frag[i][0]:
+                                    tmp_list = list(merge_list)
+                                    flag = True
+                                else:
+                                    redun = redundancy(merge_list)
+                                    sam_n = 0
+                                    for index in range(len(redun)):
+                                        if redun[index] == all_bits_frag[i][0][index]:
+                                            sam_n += 1
+                                    if sam_n > len(redun) *0.5:
+                                        r1 = redundancy(list(tmp_list[:-k])+[redun]+list(tmp_list[-k:]))
+                                        tmp_list = list(tmp_list[:-k])+[r1]+list(tmp_list[-k:])
+                                        flag = True
+                        if not flag:
+                            tmp_count = np.array(tmp_count)
+                            index = np.argmin(tmp_count)
+                            tmp_list[index] = redundancy([l for id,l in enumerate(tmp_list) if id != index]
+                                                            + [all_bits_frag[i][0]])
+                            print('**********')
+                    sum += tmp_list
                     for j in tmp_list:
                         result += j
                     tmp_list = []
-
+                    tmp_count = []
+                    flag = False
+        sum += tmp_list
+        print(tmp_list)
         for j in tmp_list:
             result += j
         return result
@@ -313,25 +382,21 @@ class Decoder():
         file_xor_pass = []
         for seq in other_match_list[0]:
             r = base_quad(seq)
-            if seq[:8] != 'CTAGAATC':
-                continue
-            else:
-                addr = '21330020'
+            addr = r[:8]
+            add_lst = r[8:]
             if addr in self.record.keys():
                 add_lst = self.revert_forbidden(
-                    r, self.record[addr])
+                    add_lst, self.record[addr])
             try:
-                info = self.ecc_decode(r, addr)
+                add_lst = self.ecc_decode(add_lst, addr)
             except:
                 continue
-            addr = info[:8]
-            add_lst = info[8:]
             file_addr_pass.append([addr, add_lst, other_match_seq[seq]])
 
         for seq in other_match_list[1]:
             r = base_quad(seq)
             addr = r[:8]
-            
+            info = r[8:]
             try:
                 id = self.slice_inv_map[self.slice_inv_index[addr]]
                 if id != sum_n+1:
@@ -340,27 +405,25 @@ class Decoder():
                 continue
             if addr in self.record.keys():
                 info = self.revert_forbidden(
-                    r, self.record[addr])
+                    info, self.record[addr])
             try:
-                info = self.ecc_decode(r, addr)
+                info = self.ecc_decode(info, addr)
             except:
                 continue
-            info = info[8:]
             file_info_pass.append([addr, info, other_match_seq[seq]])
 
         for seq in other_match_list[2]:
             r = base_quad(seq)
-            addr = self.slice[self.slice_map[sum_n+2]]
-            info = r[8:]
+            addr = r[:8]
+            xor_info = r[8:]
             if addr in self.record.keys():
-                info = self.revert_forbidden(
-                    info, self.record[addr])
+                xor_info = self.revert_forbidden(
+                    xor_info, self.record[addr])
             try:
-                info = self.ecc_decode(r, addr)
+                xor_info = self.ecc_decode(xor_info, addr)
             except:
                 continue
-            info = info[8:]
-            file_xor_pass.append([addr, info, other_match_seq[seq]])
+            file_xor_pass.append([addr, xor_info, other_match_seq[seq]])
 
         sorted_addr_count = sorted(file_addr_pass,key=itemgetter(2),reverse=True)
         sorted_info_count = sorted(file_info_pass,key=itemgetter(2),reverse=True)
@@ -414,7 +477,11 @@ class Decoder():
                     + '.'+str(self.slice_inv_map[self.slice_inv_index[size_suf]]) \
                     + ' ' +unit[0]
         file_addr = ','.join(addr_lst)
-        return file_type, date, file_size, perm, file_addr
+        total_size = str(self.slice_inv_map[self.slice_inv_index[size_pre]]) \
+                    + '.'+str(self.slice_inv_map[self.slice_inv_index[size_suf]])
+        exp_num = 10 * list(units_dict.keys()).index(unit[0])
+        total_size = round(float(total_size) * (2 ** exp_num))
+        return file_type, date, file_size, perm, file_addr, total_size
 
 def quad_base(aa):
     bases = ''
@@ -532,37 +599,47 @@ def FilterSeq(primer1, primer2,merged_list):
                 match_seq_count_dict[_seq2] = merged_seq_count[seq]
         else:
             continue
-    
+    match_seq_count = dict()
+    for k, v in match_seq_count_dict.items():
+        if len(k) >= 150 and len(k) <= 160:
+            match_seq_count[k] = int(v)
     log.write("step2: filter sequence end\t{}\n".format(getTime()))
-    return match_seq_count_dict
+    return match_seq_count
 
 
 if __name__ == "__main__":
     group = get_opts()
     opts = group.parse_args()
+    input_file = opts.input
+    pe1 = opts.pair1
+    pe2 = opts.pair2
     proportion = opts.filter
     config = opts.config
-    output = opts.output
-    
-    with open(opts.config, 'r') as f:
-        config = json.load(f)
-    pe1 = config['pe1']
-    pe2 = config['pe2']
-    primer1 = config['primer1']
-    primer2 = config['primer2']
-    p = os.path.basename(pe1).split('.')[0]
-    workdir = os.getcwd() + os.sep + output
-    if not os.path.exists(workdir):
+
+    workdir = os.getcwd() + os.sep + "result_" + input_file
+    if os.path.exists(workdir):
         print(f'{workdir} already exist')
     else:
         os.system("mkdir {}".format(workdir))
     
     log = open("result.log","w")
 
+    # ******* 0. read config (primer file) ******* 
+
+    with open(config) as f:
+        for i in f:
+            log.write("start run: \t{}\n".format(getTime()))
+            i = i.strip()
+            if i.startswith("leftPrimer"):
+                primer1 = i.split("\t")[1]
+            elif i.startswith("rightPrimer"):
+                primer2 = i.split("\t")[1]
+
     # ******* 1. merge pair-end reads with pear software *******
     result_dir = workdir + os.sep + "1_Assemble_Reads"
-    os.system("mkdir -p {}".format(result_dir))
-
+    os.system("mkdir {}".format(result_dir))
+    pe1 = input_file + os.sep + pe1
+    pe2 = input_file + os.sep + pe2
     AssembleReads(pe1, pe2, result_dir)
 
 
@@ -613,9 +690,10 @@ if __name__ == "__main__":
         data = [i.strip() for i in f.readlines()]
     for i in data:
         k,v = i.split('\t')
-        match_seq_count_dict[k] = int(v)
-    decoder = Decoder()
-    pass_decode_bit, pass_ecc_seq = decoder.check_seq(match_seq_count_dict, check_dir)
+        if len(k) >= 150 and len(k) <= 160:
+            match_seq_count_dict[k] = int(v)
+    decoder = Decoder(input_file)
+    pass_decode_bit, pass_ecc_seq, max_id = decoder.check_seq(match_seq_count_dict, check_dir)
     pass_seq_file = check_dir + os.sep + 'pass_ecc.seq'                
     with open(pass_seq_file,'w') as f:
         # table: id \t revert_bit \t count
@@ -635,9 +713,9 @@ if __name__ == "__main__":
     
     with open(pass_seq_file,'r') as f:
         data = [i.strip() for i in f.readlines()]
-    sum_n = len(data)
+    sum_n = max_id
     result = decoder.decode(pass_decode_bit)
-    file_type, date, file_size, perm, file_addr = decoder.decode_file_attr(
+    file_type, date, file_size, perm, file_addr, total_size = decoder.decode_file_attr(
         match_seq_count_dict, sum_n)
     attr_file = decode_dir + os.sep + 'file_attribution.txt'
     
@@ -650,7 +728,7 @@ if __name__ == "__main__":
     
     recover_file = decode_dir + os.sep + 'recover.' + file_type
     with open(recover_file, 'wb') as f:
-        f.write(result)
+        f.write(result[:total_size])
     f.close()
     log.write("step4: end\t{}\n".format(getTime()))
     
