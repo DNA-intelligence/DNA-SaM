@@ -114,10 +114,10 @@ python decode.py -i .\test\result.txt -o out -c config.json -d /your_path/test
 ```
 python decode_sequences.py -i input -p1 r1.fq.gz -p2 r2.fq.gz -c config.json -o out -f 0.2
 ```
-> -i: input file path
-> -c: config file which include primer sequence, fastq file and other information
-> -p1: PE1 fastq file
-> -p2: PE2 fastq file
+> -i: input file path  
+> -c: config file which include primer sequence, fastq file and other information  
+> -p1: PE1 fastq file  
+> -p2: PE2 fastq file  
 > -o: output directory  
 > -f: value of proportion of low quality bases in the sequence  
 
